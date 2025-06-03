@@ -1,0 +1,142 @@
+# ===== Collector DaemonSet =====
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: resource-collector
+  labels:
+    app: resource-collector
+spec:
+  selector:
+    matchLabels:
+      app: resource-collector
+  template:
+    metadata:
+      labels:
+        app: resource-collector
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: resource-collector
+          image: kubemonitor-collector:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+          env:
+            - name: API_SERVER_URL
+              value: "http://monitor-api-service:80"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: COLLECT_INTERVAL
+              value: "5"
+          volumeMounts:
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+              readOnly: true
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+      volumes:
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+        - name: proc
+          hostPath:
+            path: /proc
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+---
+# ===== FastAPI 서버 Deployment =====
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitor-api
+  labels:
+    app: monitor-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: monitor-api
+  template:
+    metadata:
+      labels:
+        app: monitor-api
+    spec:
+      containers:
+        - name: monitor-api
+          image: kubemonitor-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: LOG_LEVEL
+              value: "INFO"
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+---
+# ===== FastAPI 서버 Service =====
+apiVersion: v1
+kind: Service
+metadata:
+  name: monitor-api-service
+  labels:
+    app: monitor-api
+spec:
+  type: ClusterIP
+  selector:
+    app: monitor-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+      name: http
+---
+# ===== NodePort Service (외부 접근용) =====
+apiVersion: v1
+kind: Service
+metadata:
+  name: monitor-api-nodeport
+  labels:
+    app: monitor-api
+spec:
+  type: NodePort
+  selector:
+    app: monitor-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+      nodePort: 30080
+      name: http 
