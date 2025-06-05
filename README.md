@@ -31,11 +31,64 @@ kubemonitor/
 
 ## 🚀 빠른 시작
 
+### 🎯 원클릭 자동 설치 (권장)
+
+Clean Ubuntu 22.04 LTS에서 전체 시스템을 자동으로 구축하려면:
+
+```bash
+# 프로젝트 클론
+git clone <repository-url>
+cd kubemonitor
+
+# 스크립트 실행 권한 부여
+chmod +x scripts/*.sh
+
+# 전체 자동 설치 (개발환경 구축 + 빌드 + 배포 + 테스트)
+./scripts/setup-all.sh
+```
+
+### 📋 단계별 수동 설치
+
+각 단계를 개별적으로 실행하려면:
+
+```bash
+# 1단계: 개발 환경 구축 (Clean Ubuntu 기준)
+./scripts/01-setup-environment.sh
+
+# 2단계: Docker 이미지 빌드
+./scripts/02-build-images.sh
+
+# 3단계: Kubernetes 배포
+./scripts/03-deploy.sh
+
+# 4단계: 시스템 테스트
+./scripts/04-test.sh
+```
+
+### 🔧 고급 옵션
+
+특정 단계를 건너뛰고 싶다면:
+
+```bash
+# 개발 환경 구축 건너뛰기 (이미 설치된 경우)
+./scripts/setup-all.sh --skip-env
+
+# 빌드 단계 건너뛰기 (이미지가 있는 경우)
+./scripts/setup-all.sh --skip-build
+
+# 여러 단계 건너뛰기
+./scripts/setup-all.sh --skip-env --skip-build
+```
+
 ### 전제 조건
-- WSL Ubuntu 22.04 LTS
-- Docker
-- kubectl
-- Minikube 또는 Kubernetes 클러스터
+- WSL Ubuntu 22.04 LTS (Clean 설치 권장)
+- 인터넷 연결
+- sudo 권한
+
+### 기존 수동 설치 방법
+
+<details>
+<summary>기존 수동 설치 방법 보기 (클릭하여 펼치기)</summary>
 
 ### 1단계: 개발 환경 구축
 
@@ -93,21 +146,7 @@ kubectl get pods -l app=resource-collector
 kubectl get pods -l app=monitor-api
 ```
 
-### 4단계: 테스트
-
-```bash
-# Minikube IP 확인
-minikube ip
-
-# API 서버 상태 확인 (NodePort 30080으로 접근)
-curl "http://$(minikube ip):30080/health"
-
-# 노드 메트릭 조회
-curl "http://$(minikube ip):30080/api/nodes"
-
-# Swagger UI 접근
-echo "Swagger UI: http://$(minikube ip):30080/docs"
-```
+</details>
 
 ## 🔧 주요 기능
 
