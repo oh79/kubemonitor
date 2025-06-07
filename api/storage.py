@@ -1,5 +1,5 @@
 from typing import Dict, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from models import NodeMetrics, PodMetrics, NamespaceMetrics, DeploymentMetrics
 
 class MetricsStore:
@@ -17,18 +17,20 @@ class MetricsStore:
 
     def query_node_metrics(self, node: str, window: int):
         """노드 메트릭 시계열 조회 (window: 초 단위)"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff = now - timedelta(seconds=window)
         return [m for m in self.node_store.get(node, []) if m.timestamp >= cutoff]
 
     def add_pod_metrics(self, data: PodMetrics):
         """포드 메트릭 추가"""
-        key = data.pod_name
-        self.pod_store.setdefault(key, []).append(data)
+        # 새로운 모델에서는 pod 필드를 우선 사용, 없으면 pod_name 사용
+        key = getattr(data, 'pod', None) or getattr(data, 'pod_name', None)
+        if key:
+            self.pod_store.setdefault(key, []).append(data)
 
     def query_pod_metrics(self, pod_name: str, window: int):
         """포드 메트릭 시계열 조회"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff = now - timedelta(seconds=window)
         return [m for m in self.pod_store.get(pod_name, []) if m.timestamp >= cutoff]
 
@@ -38,7 +40,7 @@ class MetricsStore:
 
     def query_namespace_metrics(self, ns: str, window: int):
         """네임스페이스 메트릭 시계열 조회"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff = now - timedelta(seconds=window)
         return [m for m in self.namespace_store.get(ns, []) if m.timestamp >= cutoff]
 
@@ -50,6 +52,6 @@ class MetricsStore:
     def query_deployment_metrics(self, ns: str, dp: str, window: int):
         """디플로이먼트 메트릭 시계열 조회"""
         key = f"{ns}/{dp}"
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff = now - timedelta(seconds=window)
         return [m for m in self.deployment_store.get(key, []) if m.timestamp >= cutoff] 
