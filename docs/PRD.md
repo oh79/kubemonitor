@@ -107,58 +107,63 @@ class PodMetrics(BaseModel):
 
 #### 노드 관련
 ```
-POST /api/nodes/{node_name}
-- Collector가 노드 메트릭 전송
-
 GET /api/nodes
-- 모든 노드의 최신 메트릭 조회
+- 전체 노드 목록 및 리소스 사용량 조회
 
-GET /api/nodes/{node_name}?window={seconds}
-- 특정 노드의 메트릭 조회 (시계열 지원)
+GET /api/nodes/{node}
+- 특정 노드의 리소스 사용량 조회
 
-GET /api/nodes/{node_name}/pods
-- 노드 내 모든 파드 조회
+GET /api/nodes/{node}/pods
+- 해당 노드에 할당된 모든 파드 목록 및 리소스 사용량 조회
 ```
 
 #### 파드 관련
 ```
-POST /api/pods/{pod_name}
-- Collector가 파드 메트릭 전송
-
 GET /api/pods
-- 모든 파드의 최신 메트릭 조회
+- 전체 파드 목록 및 리소스 사용량 조회
 
-GET /api/pods/{pod_name}?window={seconds}
-- 특정 파드의 메트릭 조회 (시계열 지원)
+GET /api/pods/{pod}
+- 특정 파드의 실시간 리소스 사용량 조회
 ```
 
 #### 네임스페이스 관련
 ```
 GET /api/namespaces
-- 모든 네임스페이스의 집계 메트릭
+- 전체 네임스페이스 목록 및 리소스 사용량 조회
 
-GET /api/namespaces/{namespace}?window={seconds}
-- 특정 네임스페이스의 메트릭 조회
+GET /api/namespaces/{namespace}
+- 특정 네임스페이스의 리소스 사용량 조회
 
 GET /api/namespaces/{namespace}/pods
-- 네임스페이스 내 모든 파드 조회
-
-GET /api/namespaces/{namespace}/deployments
-- 네임스페이스 내 모든 디플로이먼트 조회
+- 해당 네임스페이스의 파드 목록 및 리소스 사용량 조회
 ```
 
 #### 디플로이먼트 관련
 ```
-POST /api/namespaces/{namespace}/deployments/{deployment}
-- Collector가 디플로이먼트 메트릭 전송
+GET /api/namespaces/{namespace}/deployments
+- 해당 네임스페이스의 디플로이먼트 목록 및 리소스 사용량 조회
 
-GET /api/namespaces/{namespace}/deployments/{deployment}?window={seconds}
-- 특정 디플로이먼트의 메트릭 조회
+GET /api/namespaces/{namespace}/deployments/{deployment}
+- 특정 디플로이먼트의 리소스 사용량 조회
 
 GET /api/namespaces/{namespace}/deployments/{deployment}/pods
-- 디플로이먼트의 모든 파드 조회
+- 해당 디플로이먼트의 파드 목록 및 리소스 사용량 조회
 ```
 
+### 시계열 조회
+```
+GET /api/nodes/{node}?window={seconds}
+- 특정 노드의 리소스 사용량 시계열 조회
+
+GET /api/pods/{pod}?window={seconds}
+- 특정 파드의 리소스 사용량 시계열 조회
+
+GET /api/namespaces/{namespace}?window={seconds}
+- 특정 네임스페이스의 리소스 사용량 시계열 조회
+
+GET /api/namespaces/{namespace}/deployments/{deployment}?window={seconds}
+- 특정 디플로이먼트의 리소스 사용량 시계열 조회
+```
 ## 구현 세부사항
 
 ### Collector 구현

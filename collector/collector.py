@@ -1,29 +1,84 @@
 #!/usr/bin/env python3
 import os
+import sys
 import time
 import json
 import requests
 import glob
+import re
+from datetime import datetime
+
+# stdout 버퍼링 비활성화 (로그 즉시 출력)
+sys.stdout.reconfigure(line_buffering=True)
 
 # 환경 변수 설정
 API_SERVER_URL = os.getenv("API_SERVER_URL", "http://localhost:8080")
 NODE_NAME       = os.getenv("NODE_NAME", "unknown-node")
 INTERVAL        = int(os.getenv("COLLECT_INTERVAL", "5"))
+DEBUG           = os.getenv("DEBUG", "false").lower() == "true"
+
+def debug_print(msg):
+    """디버그 메시지 출력"""
+    if DEBUG:
+        print(f"[DEBUG] {msg}")
 
 def read_cgroup_cpu_usage():
-    """cgroup v1에서 CPU 사용량(nanoseconds) 읽기"""
-    path = "/sys/fs/cgroup/cpu,cpuacct/cpuacct.usage"
+    """cgroup v1/v2에서 CPU 사용량 읽기"""
+    debug_print("CPU 사용량 읽기 시작")
+    
+    # cgroup v1 경로 시도
+    v1_path = "/sys/fs/cgroup/cpu,cpuacct/cpuacct.usage"
+    # cgroup v2 경로 시도
+    v2_path = "/sys/fs/cgroup/cpu.stat"
+    
     try:
-        with open(path, "r") as f:
-            return int(f.read().strip())
-    except:
+        if os.path.exists(v1_path):
+            debug_print(f"cgroup v1 CPU 경로 사용: {v1_path}")
+            with open(v1_path, "r") as f:
+                result = int(f.read().strip())
+                debug_print(f"CPU 사용량 (v1): {result} ns")
+                return result
+        elif os.path.exists(v2_path):
+            debug_print(f"cgroup v2 CPU 경로 사용: {v2_path}")
+            with open(v2_path, "r") as f:
+                for line in f:
+                    if line.startswith("usage_usec"):
+                        result = int(line.split()[1]) * 1000  # microseconds to nanoseconds
+                        debug_print(f"CPU 사용량 (v2): {result} ns")
+                        return result
+        else:
+            debug_print(f"CPU cgroup 경로를 찾을 수 없음: v1={v1_path}, v2={v2_path}")
+    except Exception as e:
+        debug_print(f"CPU 사용량 읽기 실패: {e}")
+    return None
+
+def calculate_cpu_usage_percent(current_ns, previous_ns, interval_seconds):
+    """CPU 사용률 계산 (퍼센트)"""
+    if current_ns is None or previous_ns is None:
         return None
+    
+    # 나노초 단위 차이를 계산
+    cpu_delta_ns = current_ns - previous_ns
+    # 시간 간격을 나노초로 변환
+    interval_ns = interval_seconds * 1_000_000_000
+    # CPU 사용률 계산 (0-100%)
+    cpu_percent = (cpu_delta_ns / interval_ns) * 100
+    
+    debug_print(f"CPU 계산: current={current_ns}, previous={previous_ns}, delta={cpu_delta_ns}, interval={interval_ns}, percent={cpu_percent:.2f}%")
+    return round(cpu_percent, 2)
 
 def read_proc_meminfo():
     """호스트의 /proc/meminfo에서 메모리 정보 읽기"""
+    debug_print("메모리 정보 읽기 시작")
     meminfo = {}
     try:
-        with open("/host/proc/meminfo", "r") as f:
+        mem_path = "/host/proc/meminfo"
+        if not os.path.exists(mem_path):
+            debug_print(f"메모리 경로 없음: {mem_path}")
+            return {}
+            
+        debug_print(f"메모리 경로 사용: {mem_path}")
+        with open(mem_path, "r") as f:
             for line in f:
                 key, val = line.split(":", 1)
                 meminfo[key.strip()] = int(val.strip().split()[0])
@@ -32,106 +87,527 @@ def read_proc_meminfo():
         buffers = meminfo.get("Buffers", 0)
         cached  = meminfo.get("Cached", 0)
         used    = total - free - buffers - cached
-        return {"total_kb": total, "used_kb": used, "free_kb": free}
+        result = {"total_kb": total, "used_kb": used, "free_kb": free}
+        debug_print(f"메모리 정보: Total={total}KB, Used={used}KB, Free={free}KB")
+        return result
     except Exception as e:
-        print(f"[ERROR] 메모리 정보 읽기 실패: {e}")
+        debug_print(f"메모리 정보 읽기 실패: {e}")
         return {}
 
 def read_proc_net_dev():
     """호스트의 /proc/net/dev에서 네트워크 통계 읽기"""
+    debug_print("네트워크 정보 읽기 시작")
     rx, tx = 0, 0
     try:
-        with open("/host/proc/net/dev", "r") as f:
+        net_path = "/host/proc/net/dev"
+        if not os.path.exists(net_path):
+            debug_print(f"네트워크 경로 없음: {net_path}")
+            return {"rx_bytes": 0, "tx_bytes": 0}
+            
+        debug_print(f"네트워크 경로 사용: {net_path}")
+        with open(net_path, "r") as f:
             for line in f.readlines()[2:]:  # 헤더 2줄 건너뛰기
                 parts = line.split()
-                rx += int(parts[1])  # RX bytes
-                tx += int(parts[9])  # TX bytes
+                if len(parts) >= 10:
+                    rx += int(parts[1])  # RX bytes
+                    tx += int(parts[9])  # TX bytes
+        result = {"rx_bytes": rx, "tx_bytes": tx}
+        debug_print(f"네트워크 정보: RX={rx} bytes, TX={tx} bytes")
+        return result
     except Exception as e:
-        print(f"[ERROR] 네트워크 정보 읽기 실패: {e}")
-    return {"rx_bytes": rx, "tx_bytes": tx}
+        debug_print(f"네트워크 정보 읽기 실패: {e}")
+        return {"rx_bytes": 0, "tx_bytes": 0}
 
 def read_cgroup_blkio():
-    """cgroup v1에서 블록 I/O 통계 읽기"""
-    io_stat = {"read": 0, "write": 0}
-    path = "/sys/fs/cgroup/blkio/blkio.throttle.io_service_bytes"
+    """cgroup v1/v2에서 블록 I/O 통계 읽기"""
+    debug_print("블록 I/O 정보 읽기 시작")
+    # cgroup v1 경로 시도
+    v1_path = "/sys/fs/cgroup/blkio/blkio.throttle.io_service_bytes"
+    # cgroup v2 경로 시도  
+    v2_path = "/sys/fs/cgroup/io.stat"
+    
+    try:
+        if os.path.exists(v1_path):
+            debug_print(f"cgroup v1 블록 I/O 경로 사용: {v1_path}")
+            return read_cgroup_v1_blkio(v1_path)
+        elif os.path.exists(v2_path):
+            debug_print(f"cgroup v2 블록 I/O 경로 사용: {v2_path}")
+            return read_cgroup_v2_blkio(v2_path)
+        else:
+            debug_print(f"블록 I/O cgroup 경로를 찾을 수 없음: v1={v1_path}, v2={v2_path}")
+            return {"read_bytes": 0, "write_bytes": 0}
+    except Exception as e:
+        debug_print(f"블록 I/O 정보 읽기 실패: {e}")
+        return {"read_bytes": 0, "write_bytes": 0}
+
+def read_cgroup_v1_blkio(path):
+    """cgroup v1 블록 I/O 읽기"""
+    io_stat = {"read_bytes": 0, "write_bytes": 0}
     try:
         with open(path, "r") as f:
             for line in f:
                 parts = line.split()
                 if len(parts) >= 3:
                     if parts[1] == "Read":
-                        io_stat["read"] += int(parts[2])
+                        io_stat["read_bytes"] += int(parts[2])
                     elif parts[1] == "Write":
-                        io_stat["write"] += int(parts[2])
+                        io_stat["write_bytes"] += int(parts[2])
+        debug_print(f"cgroup v1 블록 I/O: {io_stat}")
     except Exception as e:
-        print(f"[ERROR] 블록 I/O 정보 읽기 실패: {e}")
+        debug_print(f"cgroup v1 블록 I/O 읽기 실패: {e}")
     return io_stat
+
+def read_cgroup_v2_blkio(path):
+    """cgroup v2 블록 I/O 읽기"""
+    io_stat = {"read_bytes": 0, "write_bytes": 0}
+    try:
+        with open(path, "r") as f:
+            for line in f:
+                if "rbytes=" in line:
+                    io_stat["read_bytes"] = int(line.split("rbytes=")[1].split()[0])
+                if "wbytes=" in line:
+                    io_stat["write_bytes"] = int(line.split("wbytes=")[1].split()[0])
+        debug_print(f"cgroup v2 블록 I/O: {io_stat}")
+    except Exception as e:
+        debug_print(f"cgroup v2 블록 I/O 읽기 실패: {e}")
+    return io_stat
+
+def get_kubernetes_pods():
+    """Kubernetes API를 통해 현재 노드의 포드 목록 가져오기"""
+    debug_print("Kubernetes 포드 목록 조회 시작")
+    try:
+        # Kubernetes 서비스 계정 토큰 읽기
+        token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        ca_cert_path = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        
+        if not os.path.exists(token_path):
+            debug_print("Kubernetes 토큰 파일이 없음")
+            return []
+            
+        with open(token_path, "r") as f:
+            token = f.read().strip()
+        
+        headers = {"Authorization": f"Bearer {token}"}
+        api_url = "https://kubernetes.default.svc.cluster.local/api/v1/pods"
+        
+        # 현재 노드의 포드만 필터링
+        params = {"fieldSelector": f"spec.nodeName={NODE_NAME}"}
+        
+        response = requests.get(api_url, headers=headers, params=params, 
+                              verify=ca_cert_path, timeout=10)
+        
+        if response.status_code == 200:
+            pods_data = response.json()
+            pods = []
+            for item in pods_data.get("items", []):
+                pod_info = {
+                    "name": item["metadata"]["name"],
+                    "namespace": item["metadata"]["namespace"],
+                    "uid": item["metadata"]["uid"],
+                    "status": item["status"]["phase"]
+                }
+                # 포드의 소유자 정보 추가 (디플로이먼트 추적용)
+                if "ownerReferences" in item["metadata"]:
+                    for owner in item["metadata"]["ownerReferences"]:
+                        if owner["kind"] == "ReplicaSet":
+                            # ReplicaSet 이름에서 디플로이먼트 이름 추출
+                            rs_name = owner["name"]
+                            # ReplicaSet 이름 패턴: {deployment-name}-{hash}
+                            deployment_name = "-".join(rs_name.split("-")[:-1])
+                            pod_info["deployment"] = deployment_name
+                            break
+                pods.append(pod_info)
+            debug_print(f"포드 목록 조회 성공: {len(pods)}개")
+            return pods
+        else:
+            debug_print(f"Kubernetes API 호출 실패: {response.status_code}")
+            return []
+            
+    except Exception as e:
+        debug_print(f"Kubernetes 포드 목록 조회 실패: {e}")
+        return []
+
+def collect_pod_metrics_from_cgroup(pod_info):
+    """cgroup을 통해 특정 포드의 메트릭 수집"""
+    debug_print(f"포드 메트릭 수집: {pod_info['name']}")
+    
+    pod_uid = pod_info["uid"]
+    pod_name = pod_info["name"]
+    namespace = pod_info["namespace"]
+    deployment = pod_info.get("deployment")  # 디플로이먼트 정보 (있는 경우)
+    
+    # UID에서 하이픈을 언더스코어로 변환 (실제 cgroup 경로 형식)
+    pod_uid_underscore = pod_uid.replace('-', '_')
+    
+    debug_print(f"포드 UID: {pod_uid}")
+    debug_print(f"포드 UID (언더스코어): {pod_uid_underscore}")
+    
+    # cgroup v2 경로 패턴들 시도 (minikube 환경에 맞게 수정)
+    cgroup_patterns = [
+        f"/sys/fs/cgroup/kubepods.slice/kubepods-*-pod{pod_uid_underscore}.slice",
+        f"/sys/fs/cgroup/kubepods.slice/kubepods-*-pod{pod_uid}.slice",
+        f"/sys/fs/cgroup/kubepods.slice/*pod{pod_uid_underscore}*",
+        f"/sys/fs/cgroup/kubepods.slice/*pod{pod_uid}*",
+    ]
+    
+    pod_cgroup_path = None
+    for pattern in cgroup_patterns:
+        debug_print(f"패턴 시도: {pattern}")
+        matches = glob.glob(pattern)
+        debug_print(f"매칭 결과: {matches}")
+        if matches:
+            pod_cgroup_path = matches[0]
+            debug_print(f"포드 cgroup 경로 매칭: {pattern} -> {pod_cgroup_path}")
+            break
+    
+    if not pod_cgroup_path:
+        debug_print(f"포드 cgroup 경로를 찾을 수 없음: {pod_name} (UID: {pod_uid})")
+        # 디버그를 위해 실제 존재하는 경로들 출력
+        existing_paths = glob.glob("/sys/fs/cgroup/kubepods.slice/*pod*")
+        debug_print(f"존재하는 포드 경로들: {existing_paths[:5]}...")  # 처음 5개
+        debug_print(f"찾으려던 패턴: pod{pod_uid_underscore}")
+        return None
+    
+    debug_print(f"포드 cgroup 경로 발견: {pod_cgroup_path}")
+    
+    # CPU 사용량 수집 (cgroup v2)
+    cpu_usage_ns = None
+    cpu_path = os.path.join(pod_cgroup_path, "cpu.stat")
+    
+    if os.path.exists(cpu_path):
+        try:
+            with open(cpu_path, "r") as f:
+                for line in f:
+                    if line.startswith("usage_usec"):
+                        cpu_usage_ns = int(line.split()[1]) * 1000  # microseconds to nanoseconds
+                        break
+            debug_print(f"포드 CPU 사용량: {cpu_usage_ns} ns")
+        except Exception as e:
+            debug_print(f"포드 CPU 읽기 실패: {e}")
+    
+    # 메모리 사용량 수집 (cgroup v2)
+    memory_bytes = None
+    memory_path = os.path.join(pod_cgroup_path, "memory.current")
+    
+    if os.path.exists(memory_path):
+        try:
+            with open(memory_path, "r") as f:
+                memory_bytes = int(f.read().strip())
+            debug_print(f"포드 메모리 사용량: {memory_bytes} bytes")
+        except Exception as e:
+            debug_print(f"포드 메모리 읽기 실패: {e}")
+    
+    timestamp = datetime.utcnow().isoformat() + "Z"
+    
+    # 새로운 모델 형식에 맞는 포드 메트릭
+    pod_metrics = {
+        "timestamp": timestamp,
+        "node": NODE_NAME,  # 포드가 실행 중인 노드
+        "namespace": namespace,
+        "deployment": deployment,  # 디플로이먼트 정보 (있는 경우)
+        "pod": pod_name,  # 새로운 필드명
+        "cpu_millicores": int(cpu_usage_ns / 1_000_000) if cpu_usage_ns else None,  # 나노초를 밀리코어로 변환 (대략적)
+        "memory_bytes": memory_bytes,
+        "disk_read_bytes": 0,  # 포드별 디스크는 복잡하므로 일단 0
+        "disk_write_bytes": 0,
+        "network_rx_bytes": 0,  # 포드별 네트워크는 복잡하므로 일단 0
+        "network_tx_bytes": 0,
+        
+        # 기존 호환성을 위한 필드들
+        "pod_name": pod_name,
+        "cpu_usage": cpu_usage_ns,
+        "memory": {"used_bytes": memory_bytes} if memory_bytes else {},
+        "network": {"rx_bytes": 0, "tx_bytes": 0},
+        "disk": {"read_bytes": 0, "write_bytes": 0}
+    }
+    
+    debug_print(f"포드 메트릭 수집 완료: {pod_name} - CPU: {cpu_usage_ns}ns, Memory: {memory_bytes}bytes")
+    return pod_metrics
+
+def collect_pod_metrics():
+    """포드별 메트릭 수집"""
+    debug_print("포드 메트릭 수집 시작")
+    pod_metrics = []
+    
+    # Kubernetes API를 통해 포드 목록 가져오기
+    pods = get_kubernetes_pods()
+    
+    for pod_info in pods:
+        if pod_info["status"] == "Running":  # 실행 중인 포드만
+            metrics = collect_pod_metrics_from_cgroup(pod_info)
+            if metrics:
+                pod_metrics.append(metrics)
+    
+    debug_print(f"포드 메트릭 수집 완료: {len(pod_metrics)}개")
+    return pod_metrics
+
+def collect_namespace_metrics():
+    """네임스페이스별 집계 메트릭 수집"""
+    debug_print("네임스페이스 메트릭 수집 시작")
+    
+    # 포드 메트릭을 먼저 수집
+    pod_metrics = collect_pod_metrics()
+    
+    # 네임스페이스별로 집계
+    namespace_stats = {}
+    
+    for pod in pod_metrics:
+        ns = pod["namespace"]
+        if ns not in namespace_stats:
+            namespace_stats[ns] = {
+                "cpu_millicores": 0,
+                "memory_bytes": 0,
+                "disk_read_bytes": 0,
+                "disk_write_bytes": 0,
+                "network_rx_bytes": 0,
+                "network_tx_bytes": 0,
+                "pod_count": 0
+            }
+        
+        # 새로운 필드명으로 집계
+        if pod.get("cpu_millicores"):
+            namespace_stats[ns]["cpu_millicores"] += pod["cpu_millicores"]
+        if pod.get("memory_bytes"):
+            namespace_stats[ns]["memory_bytes"] += pod["memory_bytes"]
+        if pod.get("disk_read_bytes"):
+            namespace_stats[ns]["disk_read_bytes"] += pod["disk_read_bytes"]
+        if pod.get("disk_write_bytes"):
+            namespace_stats[ns]["disk_write_bytes"] += pod["disk_write_bytes"]
+        if pod.get("network_rx_bytes"):
+            namespace_stats[ns]["network_rx_bytes"] += pod["network_rx_bytes"]
+        if pod.get("network_tx_bytes"):
+            namespace_stats[ns]["network_tx_bytes"] += pod["network_tx_bytes"]
+        namespace_stats[ns]["pod_count"] += 1
+    
+    # 네임스페이스 메트릭 생성
+    namespace_metrics = []
+    timestamp = datetime.utcnow().isoformat() + "Z"
+    
+    for ns, stats in namespace_stats.items():
+        metrics = {
+            "timestamp": timestamp,
+            "namespace": ns,
+            "cpu_millicores": stats["cpu_millicores"],
+            "memory_bytes": stats["memory_bytes"],
+            "disk_read_bytes": stats["disk_read_bytes"],
+            "disk_write_bytes": stats["disk_write_bytes"],
+            "network_rx_bytes": stats["network_rx_bytes"],
+            "network_tx_bytes": stats["network_tx_bytes"],
+            
+            # 기존 호환성을 위한 필드
+            "cpu_usage": stats["cpu_millicores"] / 10 if stats["cpu_millicores"] else 0  # 대략적인 변환
+        }
+        namespace_metrics.append(metrics)
+    
+    debug_print(f"네임스페이스 메트릭 수집 완료: {len(namespace_metrics)}개")
+    return namespace_metrics
+
+def collect_deployment_metrics():
+    """디플로이먼트별 집계 메트릭 수집"""
+    debug_print("디플로이먼트 메트릭 수집 시작")
+    
+    # 포드 메트릭을 먼저 수집
+    pod_metrics = collect_pod_metrics()
+    pods = get_kubernetes_pods()
+    
+    # 디플로이먼트별로 집계
+    deployment_stats = {}
+    
+    for pod in pod_metrics:
+        # 해당 포드의 디플로이먼트 정보 찾기
+        deployment_name = pod.get("deployment")
+        
+        if not deployment_name:
+            continue  # 디플로이먼트가 없는 포드는 건너뛰기
+        
+        key = f"{pod['namespace']}/{deployment_name}"
+        if key not in deployment_stats:
+            deployment_stats[key] = {
+                "namespace": pod["namespace"],
+                "deployment": deployment_name,
+                "cpu_millicores": 0,
+                "memory_bytes": 0,
+                "disk_read_bytes": 0,
+                "disk_write_bytes": 0,
+                "network_rx_bytes": 0,
+                "network_tx_bytes": 0,
+                "pod_count": 0
+            }
+        
+        # 새로운 필드명으로 집계
+        if pod.get("cpu_millicores"):
+            deployment_stats[key]["cpu_millicores"] += pod["cpu_millicores"]
+        if pod.get("memory_bytes"):
+            deployment_stats[key]["memory_bytes"] += pod["memory_bytes"]
+        if pod.get("disk_read_bytes"):
+            deployment_stats[key]["disk_read_bytes"] += pod["disk_read_bytes"]
+        if pod.get("disk_write_bytes"):
+            deployment_stats[key]["disk_write_bytes"] += pod["disk_write_bytes"]
+        if pod.get("network_rx_bytes"):
+            deployment_stats[key]["network_rx_bytes"] += pod["network_rx_bytes"]
+        if pod.get("network_tx_bytes"):
+            deployment_stats[key]["network_tx_bytes"] += pod["network_tx_bytes"]
+        deployment_stats[key]["pod_count"] += 1
+    
+    # 디플로이먼트 메트릭 생성
+    deployment_metrics = []
+    timestamp = datetime.utcnow().isoformat() + "Z"
+    
+    for key, stats in deployment_stats.items():
+        metrics = {
+            "timestamp": timestamp,
+            "namespace": stats["namespace"],
+            "deployment": stats["deployment"],
+            "cpu_millicores": stats["cpu_millicores"],
+            "memory_bytes": stats["memory_bytes"],
+            "disk_read_bytes": stats["disk_read_bytes"],
+            "disk_write_bytes": stats["disk_write_bytes"],
+            "network_rx_bytes": stats["network_rx_bytes"],
+            "network_tx_bytes": stats["network_tx_bytes"],
+            
+            # 기존 호환성을 위한 필드
+            "cpu_usage": stats["cpu_millicores"] / 10 if stats["cpu_millicores"] else 0  # 대략적인 변환
+        }
+        deployment_metrics.append(metrics)
+    
+    debug_print(f"디플로이먼트 메트릭 수집 완료: {len(deployment_metrics)}개")
+    return deployment_metrics
 
 def collect_node_metrics(prev_cpu_stat=None):
     """노드 메트릭 수집 - CPU, 메모리, 네트워크, 디스크"""
-    # TODO: CPU 사용률 계산 로직 추가 (proc/stat 기반 또는 cgroup 사용)
-    cpu_usage    = None
+    debug_print(f"=== 노드 메트릭 수집 시작: {NODE_NAME} ===")
+    
     cgroup_cpu_ns = read_cgroup_cpu_usage()
+    cpu_usage_percent = None
+    
+    # CPU 사용률 계산 (이전 값이 있는 경우)
+    if prev_cpu_stat and cgroup_cpu_ns:
+        cpu_usage_percent = calculate_cpu_usage_percent(
+            cgroup_cpu_ns, prev_cpu_stat, INTERVAL
+        )
+    
     mem          = read_proc_meminfo()
     net          = read_proc_net_dev()
     blk          = read_cgroup_blkio()
-    timestamp    = int(time.time())
+    timestamp    = datetime.utcnow().isoformat() + "Z"
     
-    return {
+    # 새로운 모델 형식에 맞는 노드 메트릭
+    metrics = {
         "timestamp": timestamp,
         "node": NODE_NAME,
-        "cpu_usage": cpu_usage,
-        "cgroup_cpu_ns": cgroup_cpu_ns,
+        "cpu_millicores": int(cpu_usage_percent * 10) if cpu_usage_percent else None,  # 퍼센트를 밀리코어로 대략 변환
+        "memory_bytes": mem.get("used_kb", 0) * 1024 if mem else None,  # KB를 bytes로 변환
+        "disk_read_bytes": blk.get("read_bytes", 0) if blk else 0,
+        "disk_write_bytes": blk.get("write_bytes", 0) if blk else 0,
+        "network_rx_bytes": net.get("rx_bytes", 0) if net else 0,
+        "network_tx_bytes": net.get("tx_bytes", 0) if net else 0,
+        
+        # 기존 호환성을 위한 필드들
+        "cpu_usage": cpu_usage_percent,  # 퍼센트 값
+        "cpu_usage_percent": cpu_usage_percent,  # 테스트 스크립트 호환성
+        "cgroup_cpu_ns": cgroup_cpu_ns,  # 원시 나노초 값
         "memory": mem,
         "network": net,
         "disk": blk
     }
-
-def collect_pod_metrics():
-    """포드별 메트릭 수집 (cgroup 경로 기반)"""
-    pod_metrics = []
-    # 예시: cgroup 경로 패턴 탐색 (실제 환경에 맞게 경로를 조정해야 함)
-    for pod_cg in glob.glob("/sys/fs/cgroup/*pod*:"):
-        # TODO: pod 단위 메트릭 추출 로직 구현
-        pod_metrics.append({})
-    return pod_metrics
+    
+    debug_print(f"=== 노드 메트릭 수집 완료 ===")
+    debug_print(f"CPU 사용률: {cpu_usage_percent}%")
+    debug_print(f"CPU 밀리코어: {metrics['cpu_millicores']}")
+    debug_print(f"메모리 bytes: {metrics['memory_bytes']}")
+    debug_print(f"네트워크: RX={metrics['network_rx_bytes']}, TX={metrics['network_tx_bytes']}")
+    debug_print(f"디스크: Read={metrics['disk_read_bytes']}, Write={metrics['disk_write_bytes']}")
+    
+    return metrics
 
 def send_to_api(endpoint, payload):
     """API 서버로 메트릭 데이터 전송"""
     url = f"{API_SERVER_URL}/{endpoint}"
     headers = {"Content-Type": "application/json"}
+    debug_print(f"=== API 전송 시작 ===")
+    debug_print(f"URL: {url}")
+    debug_print(f"Payload: {json.dumps(payload, indent=2)}")
+    
     try:
-        resp = requests.post(url, data=json.dumps(payload), headers=headers, timeout=5)
+        resp = requests.post(url, data=json.dumps(payload), headers=headers, timeout=10)
+        debug_print(f"응답 상태: {resp.status_code}")
+        debug_print(f"응답 내용: {resp.text}")
+        
         if resp.status_code != 200:
-            print(f"[WARN] API 응답 {resp.status_code}: {resp.text}")
+            debug_print(f"[WARN] API 응답 {resp.status_code}: {resp.text}")
         else:
-            print(f"[INFO] 메트릭 전송 성공: {endpoint}")
+            debug_print(f"[SUCCESS] 메트릭 전송 성공: {endpoint}")
     except Exception as e:
-        print(f"[ERROR] API 전송 실패: {e}")
+        debug_print(f"[ERROR] API 전송 실패: {e}")
 
 def main():
     """메인 루프 - 주기적으로 메트릭 수집 및 전송"""
-    print(f"[INFO] Collector 시작 - Node: {NODE_NAME}, API: {API_SERVER_URL}, Interval: {INTERVAL}s")
-    prev_cpu_stat = None
+    debug_print("=" * 50)
+    debug_print("KUBEMONITOR COLLECTOR 시작!")
+    debug_print("=" * 50)
+    debug_print(f"Node: {NODE_NAME}")
+    debug_print(f"API: {API_SERVER_URL}")
+    debug_print(f"Interval: {INTERVAL}s")
+    debug_print(f"Debug: {DEBUG}")
+    
+    # 시작 시 환경 확인
+    debug_print("=== 환경 확인 ===")
+    paths_to_check = [
+        "/sys/fs/cgroup",
+        "/host/proc",
+        "/sys/fs/cgroup/cpu,cpuacct/cpuacct.usage",
+        "/sys/fs/cgroup/cpu.stat",
+        "/host/proc/meminfo",
+        "/host/proc/net/dev",
+        "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    ]
+    
+    for path in paths_to_check:
+        if os.path.exists(path):
+            debug_print(f"  ✅ {path} 존재")
+        else:
+            debug_print(f"  ❌ {path} 없음")
+    
+    debug_print("=== 메인 루프 시작 ===")
+    prev_cpu_ns = None
+    loop_count = 0
     
     while True:
         try:
+            loop_count += 1
+            debug_print(f"\n>>> 루프 #{loop_count} 시작 <<<")
+            
             # 노드 메트릭 수집 및 전송
-            node_data = collect_node_metrics(prev_cpu_stat)
+            node_data = collect_node_metrics(prev_cpu_ns)
             send_to_api(f"api/nodes/{NODE_NAME}", node_data)
             
-            # Pod 메트릭 수집 및 전송 (필요 시 구현)
+            # 다음 CPU 계산을 위해 현재 값 저장
+            prev_cpu_ns = node_data.get("cgroup_cpu_ns")
+            
+            # 포드 메트릭 수집 및 전송
             pod_list = collect_pod_metrics()
             for pod in pod_list:
-                # send_to_api(f"api/pods/{pod_name}", pod)
-                pass
-                
+                send_to_api(f"api/pods/{pod['pod']}", pod)
+            
+            # 네임스페이스 메트릭 수집 및 전송
+            namespace_list = collect_namespace_metrics()
+            for ns in namespace_list:
+                send_to_api(f"api/namespaces/{ns['namespace']}", ns)
+            
+            # 디플로이먼트 메트릭 수집 및 전송
+            deployment_list = collect_deployment_metrics()
+            for dp in deployment_list:
+                send_to_api(f"api/namespaces/{dp['namespace']}/deployments/{dp['deployment']}", dp)
+            
+            debug_print(f">>> 루프 #{loop_count} 완료, {INTERVAL}초 대기 <<<")
             time.sleep(INTERVAL)
         except KeyboardInterrupt:
-            print("[INFO] Collector 종료")
+            debug_print("[INFO] Collector 종료")
             break
         except Exception as e:
-            print(f"[ERROR] 수집 루프 오류: {e}")
+            debug_print(f"[ERROR] 수집 루프 오류: {e}")
+            import traceback
+            debug_print(f"[ERROR] 상세 오류: {traceback.format_exc()}")
             time.sleep(INTERVAL)
 
 if __name__ == "__main__":

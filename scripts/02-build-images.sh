@@ -35,7 +35,7 @@ fi
 print_step "Minikube 상태 확인..."
 if ! minikube status > /dev/null 2>&1; then
     print_step "Minikube 시작 중..."
-    minikube start --driver=docker --cpus=4 --memory=8192
+    minikube start --driver=docker --cpus=4 --memory=4096
     print_success "Minikube 시작 완료"
 else
     print_success "Minikube가 이미 실행 중입니다"
