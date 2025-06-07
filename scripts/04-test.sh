@@ -166,4 +166,18 @@ echo "📦 네임스페이스: ${API_URL}/api/namespaces"
 echo "🔄 시계열 조회: ${API_URL}/api/nodes/${NODE_NAME}?window=60"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-print_success "모든 테스트가 완료되었습니다! 🎉" 
+print_success "모든 테스트가 완료되었습니다! 🎉"
+
+# 디버깅을 위한 로그 확인 추가
+print_step "Collector 로그 확인..."
+echo "최근 Collector 로그:"
+kubectl logs -l app=resource-collector --tail=20
+
+print_step "API 서버 로그 확인..."
+echo "최근 API 서버 로그:"
+kubectl logs -l app=monitor-api --tail=20
+
+# 포드 상태 상세 확인
+print_step "포드 상태 상세 확인..."
+kubectl get pods -o wide
+kubectl describe pods -l app=resource-collector 
