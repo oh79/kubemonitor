@@ -243,8 +243,17 @@ def collect_pod_metrics_from_cgroup(pod_info):
     # Minikube 환경에 맞는 실제 패턴들
     if is_cgroup_v2:
         cgroup_patterns = [
-            # 실제 테스트를 통해 검증된 패턴들 (자동 생성됨)
+            # Minikube에서 실제 사용되는 정확한 패턴들
             f"/sys/fs/cgroup/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod{pod_uid_underscore}.slice",
+            f"/sys/fs/cgroup/kubepods.slice/kubepods-besteffort.slice/kubepods-besteffort-pod{pod_uid_underscore}.slice",
+            # 하이픈 없이 연결된 형태도 시도
+            f"/sys/fs/cgroup/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod{pod_uid.replace('-', '')}.slice",
+            f"/sys/fs/cgroup/kubepods.slice/kubepods-besteffort.slice/kubepods-besteffort-pod{pod_uid.replace('-', '')}.slice",
+            # 기존 패턴들도 유지
+            f"/sys/fs/cgroup/kubepods.slice/kubepods-*-pod{pod_uid_underscore}.slice",
+            f"/sys/fs/cgroup/kubepods.slice/kubepods-*-pod{pod_uid}.slice",
+            f"/sys/fs/cgroup/kubepods.slice/*pod{pod_uid_underscore}*",
+            f"/sys/fs/cgroup/kubepods.slice/*pod{pod_uid}*",
         ]
     else:
         cgroup_patterns = [

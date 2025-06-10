@@ -1,0 +1,1 @@
+kubectl port-forward service/monitor-api-nodeport 8080:80
