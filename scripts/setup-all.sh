@@ -37,6 +37,48 @@ print_error() {
     echo -e "${RED}❌ $1${NC}"
 }
 
+# Docker 그룹 권한 확인 함수
+check_docker_access() {
+    # Docker 소켓에 접근 가능한지 확인
+    if docker ps >/dev/null 2>&1; then
+        return 0  # 권한 있음
+    else
+        return 1  # 권한 없음
+    fi
+}
+
+# Docker 그룹 권한 적용 함수
+apply_docker_group() {
+    print_warning "Docker 그룹 권한을 적용합니다..."
+    
+    # 현재 사용자가 docker 그룹에 속해있는지 확인
+    if ! groups | grep -q "\bdocker\b"; then
+        print_error "사용자가 docker 그룹에 속해있지 않습니다."
+        print_warning "먼저 환경 설정 스크립트(01-setup-environment.sh)를 실행해주세요."
+        exit 1
+    fi
+    
+    # Docker 권한 테스트
+    if ! check_docker_access; then
+        print_warning "Docker 그룹 권한이 현재 세션에 적용되지 않았습니다."
+        print_warning "스크립트를 다시 시작하여 권한을 적용합니다..."
+        
+        # 현재 스크립트의 인수들을 보존
+        SCRIPT_ARGS=""
+        for arg in "$@"; do
+            SCRIPT_ARGS="$SCRIPT_ARGS \"$arg\""
+        done
+        
+        # 환경변수 설정하여 재실행 방지
+        export DOCKER_GROUP_APPLIED=true
+        
+        # exec을 사용하여 새로운 그룹 권한으로 스크립트 재실행
+        exec sg docker -c "DOCKER_GROUP_APPLIED=true \"$0\" $SCRIPT_ARGS"
+    fi
+    
+    print_success "Docker 그룹 권한이 정상적으로 적용되었습니다."
+}
+
 # 스크립트 시작
 print_header
 
@@ -96,17 +138,22 @@ if [ "$SKIP_ENV_SETUP" = false ]; then
         bash scripts/01-setup-environment.sh
         print_success "개발 환경 구축 완료"
         
-        # Docker 그룹 적용
-        print_warning "Docker 그룹 변경사항 적용 중..."
-        newgrp docker << EONG
-        echo "Docker 그룹 적용 완료"
-EONG
+        # Docker 그룹 권한 적용 (자동화된 방식)
+        if [ "${DOCKER_GROUP_APPLIED:-false}" != "true" ]; then
+            apply_docker_group "$@"
+        fi
+        
     else
         print_error "scripts/01-setup-environment.sh 파일을 찾을 수 없습니다."
         exit 1
     fi
 else
     print_warning "개발 환경 구축 단계를 건너뜁니다."
+    # 환경 구축을 건너뛰더라도 Docker 권한은 확인
+    if ! check_docker_access; then
+        print_warning "Docker 권한을 확인합니다..."
+        apply_docker_group "$@"
+    fi
 fi
 
 # 2단계: 이미지 빌드
