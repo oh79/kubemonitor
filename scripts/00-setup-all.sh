@@ -54,7 +54,7 @@ apply_docker_group() {
     # 현재 사용자가 docker 그룹에 속해있는지 확인
     if ! groups | grep -q "\bdocker\b"; then
         print_error "사용자가 docker 그룹에 속해있지 않습니다."
-        print_warning "먼저 환경 설정 스크립트(01-setup-environment.sh)를 실행해주세요."
+        print_warning "newgrp docker 명령어를 실행 후 다시 00-setup-all.sh 스크립트를 실행해주세요."
         exit 1
     fi
     
