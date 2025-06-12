@@ -24,6 +24,7 @@ kubemonitor/
 │ ├── 04-test.sh # 시스템 테스트
 │ ├── 05-test-api.sh # API 테스트
 │ ├── 05-test-api-with-save.sh # API 테스트 결과 저장
+│ ├── 06-comprehensive-test-with-kubectl # API 테스트 및 kubectl 결과 저장
 │ ├── kube-port-forward.sh # 포트 포워딩
 │ └── shutdown_all_settings.sh # 전체 종료
 ├── result/ # 테스트 결과 저장소

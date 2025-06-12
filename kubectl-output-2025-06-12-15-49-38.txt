@@ -1,0 +1,300 @@
+========== 클러스터 정보 확인 ==========
+명령어: kubectl cluster-info
+Kubernetes control plane is running at https://192.168.49.2:8443
+CoreDNS is running at https://192.168.49.2:8443/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy
+
+To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
+========== 노드 상태 확인 ==========
+명령어: kubectl get nodes -o wide
+NAME       STATUS   ROLES           AGE   VERSION   INTERNAL-IP    EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION       CONTAINER-RUNTIME
+minikube   Ready    control-plane   2d    v1.33.1   192.168.49.2   <none>        Ubuntu 22.04.5 LTS   5.15.0-134-generic   docker://28.1.1
+========== 네임스페이스 목록 ==========
+명령어: kubectl get namespaces
+NAME              STATUS   AGE
+default           Active   2d
+kube-node-lease   Active   2d
+kube-public       Active   2d
+kube-system       Active   2d
+========== 전체 시스템 포드 상태 ==========
+명령어: kubectl get pods --all-namespaces
+NAMESPACE     NAME                               READY   STATUS    RESTARTS   AGE
+default       monitor-api-bc867b8d8-xgqcl        1/1     Running   0          128m
+default       resource-collector-qhqqn           1/1     Running   0          128m
+kube-system   coredns-674b8bbfcf-c6j87           1/1     Running   0          2d
+kube-system   etcd-minikube                      1/1     Running   0          2d
+kube-system   kube-apiserver-minikube            1/1     Running   0          2d
+kube-system   kube-controller-manager-minikube   1/1     Running   0          2d
+kube-system   kube-proxy-r2wx9                   1/1     Running   0          2d
+kube-system   kube-scheduler-minikube            1/1     Running   0          2d
+kube-system   metrics-server-7fbb699795-tcxt6    1/1     Running   0          115m
+kube-system   storage-provisioner                1/1     Running   0          2d
+========== Metrics Server 상태 확인 ==========
+명령어: kubectl get pods -n kube-system | grep metrics-server
+metrics-server-7fbb699795-tcxt6    1/1     Running   0          115m
+========== kubectl로 노드 리소스 사용량 확인 ==========
+명령어: kubectl top nodes
+NAME       CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+minikube   202m         5%       921Mi           11%         
+========== kubectl로 특정 노드 상세 정보 확인 ==========
+명령어: kubectl describe node minikube
+Name:               minikube
+Roles:              control-plane
+Labels:             beta.kubernetes.io/arch=amd64
+                    beta.kubernetes.io/os=linux
+                    kubernetes.io/arch=amd64
+                    kubernetes.io/hostname=minikube
+                    kubernetes.io/os=linux
+                    minikube.k8s.io/commit=f8f52f5de11fc6ad8244afac475e1d0f96841df1-dirty
+                    minikube.k8s.io/name=minikube
+                    minikube.k8s.io/primary=true
+                    minikube.k8s.io/updated_at=2025_06_10T14_50_53_0700
+                    minikube.k8s.io/version=v1.36.0
+                    node-role.kubernetes.io/control-plane=
+                    node.kubernetes.io/exclude-from-external-load-balancers=
+Annotations:        kubeadm.alpha.kubernetes.io/cri-socket: unix:///var/run/cri-dockerd.sock
+                    node.alpha.kubernetes.io/ttl: 0
+                    volumes.kubernetes.io/controller-managed-attach-detach: true
+CreationTimestamp:  Tue, 10 Jun 2025 14:50:49 +0000
+Taints:             <none>
+Unschedulable:      false
+Lease:
+  HolderIdentity:  minikube
+  AcquireTime:     <unset>
+  RenewTime:       Thu, 12 Jun 2025 15:49:33 +0000
+Conditions:
+  Type             Status  LastHeartbeatTime                 LastTransitionTime                Reason                       Message
+  ----             ------  -----------------                 ------------------                ------                       -------
+  MemoryPressure   False   Thu, 12 Jun 2025 15:46:11 +0000   Tue, 10 Jun 2025 14:50:48 +0000   KubeletHasSufficientMemory   kubelet has sufficient memory available
+  DiskPressure     False   Thu, 12 Jun 2025 15:46:11 +0000   Tue, 10 Jun 2025 14:50:48 +0000   KubeletHasNoDiskPressure     kubelet has no disk pressure
+  PIDPressure      False   Thu, 12 Jun 2025 15:46:11 +0000   Tue, 10 Jun 2025 14:50:48 +0000   KubeletHasSufficientPID      kubelet has sufficient PID available
+  Ready            True    Thu, 12 Jun 2025 15:46:11 +0000   Tue, 10 Jun 2025 14:50:49 +0000   KubeletReady                 kubelet is posting ready status
+Addresses:
+  InternalIP:  192.168.49.2
+  Hostname:    minikube
+Capacity:
+  cpu:                4
+  ephemeral-storage:  20134592Ki
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             8126912Ki
+  pods:               110
+Allocatable:
+  cpu:                4
+  ephemeral-storage:  20134592Ki
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             8126912Ki
+  pods:               110
+System Info:
+  Machine ID:                 14f39190d966479eb76797956470ab0c
+  System UUID:                acadcf7a-7ef7-4c04-8350-62ea0e35fbf9
+  Boot ID:                    2e667198-cbf0-498a-acfe-2343087375d0
+  Kernel Version:             5.15.0-134-generic
+  OS Image:                   Ubuntu 22.04.5 LTS
+  Operating System:           linux
+  Architecture:               amd64
+  Container Runtime Version:  docker://28.1.1
+  Kubelet Version:            v1.33.1
+  Kube-Proxy Version:         
+PodCIDR:                      10.244.0.0/24
+PodCIDRs:                     10.244.0.0/24
+Non-terminated Pods:          (10 in total)
+  Namespace                   Name                                CPU Requests  CPU Limits  Memory Requests  Memory Limits  Age
+  ---------                   ----                                ------------  ----------  ---------------  -------------  ---
+  default                     monitor-api-bc867b8d8-xgqcl         250m (6%)     500m (12%)  256Mi (3%)       512Mi (6%)     128m
+  default                     resource-collector-qhqqn            50m (1%)      100m (2%)   64Mi (0%)        128Mi (1%)     128m
+  kube-system                 coredns-674b8bbfcf-c6j87            100m (2%)     0 (0%)      70Mi (0%)        170Mi (2%)     2d
+  kube-system                 etcd-minikube                       100m (2%)     0 (0%)      100Mi (1%)       0 (0%)         2d
+  kube-system                 kube-apiserver-minikube             250m (6%)     0 (0%)      0 (0%)           0 (0%)         2d
+  kube-system                 kube-controller-manager-minikube    200m (5%)     0 (0%)      0 (0%)           0 (0%)         2d
+  kube-system                 kube-proxy-r2wx9                    0 (0%)        0 (0%)      0 (0%)           0 (0%)         2d
+  kube-system                 kube-scheduler-minikube             100m (2%)     0 (0%)      0 (0%)           0 (0%)         2d
+  kube-system                 metrics-server-7fbb699795-tcxt6     100m (2%)     0 (0%)      200Mi (2%)       0 (0%)         116m
+  kube-system                 storage-provisioner                 0 (0%)        0 (0%)      0 (0%)           0 (0%)         2d
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests     Limits
+  --------           --------     ------
+  cpu                1150m (28%)  600m (15%)
+  memory             690Mi (8%)   810Mi (10%)
+  ephemeral-storage  0 (0%)       0 (0%)
+  hugepages-1Gi      0 (0%)       0 (0%)
+  hugepages-2Mi      0 (0%)       0 (0%)
+Events:              <none>
+========== kubectl로 노드의 포드 목록 확인 ==========
+명령어: kubectl get pods --all-namespaces --field-selector spec.nodeName=minikube -o wide
+NAMESPACE     NAME                               READY   STATUS    RESTARTS   AGE    IP             NODE       NOMINATED NODE   READINESS GATES
+default       monitor-api-bc867b8d8-xgqcl        1/1     Running   0          128m   10.244.0.12    minikube   <none>           <none>
+default       resource-collector-qhqqn           1/1     Running   0          128m   10.244.0.13    minikube   <none>           <none>
+kube-system   coredns-674b8bbfcf-c6j87           1/1     Running   0          2d     10.244.0.2     minikube   <none>           <none>
+kube-system   etcd-minikube                      1/1     Running   0          2d     192.168.49.2   minikube   <none>           <none>
+kube-system   kube-apiserver-minikube            1/1     Running   0          2d     192.168.49.2   minikube   <none>           <none>
+kube-system   kube-controller-manager-minikube   1/1     Running   0          2d     192.168.49.2   minikube   <none>           <none>
+kube-system   kube-proxy-r2wx9                   1/1     Running   0          2d     192.168.49.2   minikube   <none>           <none>
+kube-system   kube-scheduler-minikube            1/1     Running   0          2d     192.168.49.2   minikube   <none>           <none>
+kube-system   metrics-server-7fbb699795-tcxt6    1/1     Running   0          116m   10.244.0.14    minikube   <none>           <none>
+kube-system   storage-provisioner                1/1     Running   0          2d     192.168.49.2   minikube   <none>           <none>
+========== kubectl로 포드 리소스 사용량 확인 ==========
+명령어: kubectl top pods --all-namespaces
+NAMESPACE     NAME                               CPU(cores)   MEMORY(bytes)   
+default       monitor-api-bc867b8d8-xgqcl        6m           58Mi            
+default       resource-collector-qhqqn           13m          16Mi            
+kube-system   coredns-674b8bbfcf-c6j87           11m          18Mi            
+kube-system   etcd-minikube                      27m          150Mi           
+kube-system   kube-apiserver-minikube            49m          216Mi           
+kube-system   kube-controller-manager-minikube   18m          43Mi            
+kube-system   kube-proxy-r2wx9                   1m           12Mi            
+kube-system   kube-scheduler-minikube            9m           21Mi            
+kube-system   metrics-server-7fbb699795-tcxt6    4m           17Mi            
+kube-system   storage-provisioner                2m           9Mi             
+========== kubectl로 포드 리소스 사용량 확인 ==========
+명령어: kubectl top pod monitor-api-bc867b8d8-xgqcl -n default
+NAME                          CPU(cores)   MEMORY(bytes)   
+monitor-api-bc867b8d8-xgqcl   6m           58Mi            
+========== kubectl로 네임스페이스별 리소스 확인 ==========
+명령어: kubectl get namespaces && kubectl top pods --all-namespaces | head -15
+NAME              STATUS   AGE
+default           Active   2d
+kube-node-lease   Active   2d
+kube-public       Active   2d
+kube-system       Active   2d
+NAMESPACE     NAME                               CPU(cores)   MEMORY(bytes)   
+default       monitor-api-bc867b8d8-xgqcl        6m           58Mi            
+default       resource-collector-qhqqn           13m          16Mi            
+kube-system   coredns-674b8bbfcf-c6j87           11m          18Mi            
+kube-system   etcd-minikube                      27m          150Mi           
+kube-system   kube-apiserver-minikube            49m          216Mi           
+kube-system   kube-controller-manager-minikube   18m          43Mi            
+kube-system   kube-proxy-r2wx9                   1m           12Mi            
+kube-system   kube-scheduler-minikube            9m           21Mi            
+kube-system   metrics-server-7fbb699795-tcxt6    4m           17Mi            
+kube-system   storage-provisioner                2m           9Mi             
+========== kubectl로 default 네임스페이스 확인 ==========
+명령어: kubectl get all -n default
+NAME                              READY   STATUS    RESTARTS   AGE
+pod/monitor-api-bc867b8d8-xgqcl   1/1     Running   0          128m
+pod/resource-collector-qhqqn      1/1     Running   0          128m
+
+NAME                           TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+service/kubernetes             ClusterIP   10.96.0.1      <none>        443/TCP        166m
+service/monitor-api-nodeport   NodePort    10.106.86.56   <none>        80:30080/TCP   128m
+service/monitor-api-service    ClusterIP   10.96.146.98   <none>        80/TCP         128m
+
+NAME                                DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+daemonset.apps/resource-collector   1         1         1       1            1           <none>          128m
+
+NAME                          READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/monitor-api   1/1     1            1           128m
+
+NAME                                    DESIRED   CURRENT   READY   AGE
+replicaset.apps/monitor-api-bc867b8d8   1         1         1       128m
+========== kubectl로 default 네임스페이스 포드 확인 ==========
+명령어: kubectl get pods -n default -o wide
+NAME                          READY   STATUS    RESTARTS   AGE    IP            NODE       NOMINATED NODE   READINESS GATES
+monitor-api-bc867b8d8-xgqcl   1/1     Running   0          128m   10.244.0.12   minikube   <none>           <none>
+resource-collector-qhqqn      1/1     Running   0          128m   10.244.0.13   minikube   <none>           <none>
+========== kubectl로 디플로이먼트 확인 ==========
+명령어: kubectl get deployments -n default -o wide
+NAME          READY   UP-TO-DATE   AVAILABLE   AGE    CONTAINERS    IMAGES                   SELECTOR
+monitor-api   1/1     1            1           128m   monitor-api   kubemonitor-api:latest   app=monitor-api
+========== kubectl로 monitor-api 디플로이먼트 확인 ==========
+명령어: kubectl describe deployment monitor-api -n default
+Name:                   monitor-api
+Namespace:              default
+CreationTimestamp:      Thu, 12 Jun 2025 13:41:16 +0000
+Labels:                 app=monitor-api
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               app=monitor-api
+Replicas:               1 desired | 1 updated | 1 total | 1 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable, 25% max surge
+Pod Template:
+  Labels:  app=monitor-api
+  Containers:
+   monitor-api:
+    Image:      kubemonitor-api:latest
+    Port:       8080/TCP
+    Host Port:  0/TCP
+    Limits:
+      cpu:     500m
+      memory:  512Mi
+    Requests:
+      cpu:      250m
+      memory:   256Mi
+    Liveness:   http-get http://:8080/health delay=30s timeout=1s period=30s #success=1 #failure=3
+    Readiness:  http-get http://:8080/health delay=10s timeout=1s period=10s #success=1 #failure=3
+    Environment:
+      LOG_LEVEL:   INFO
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   monitor-api-bc867b8d8 (1/1 replicas created)
+Events:          <none>
+========== kubectl로 monitor-api 포드 확인 ==========
+명령어: kubectl get pods -n default -l app=monitor-api -o wide
+NAME                          READY   STATUS    RESTARTS   AGE    IP            NODE       NOMINATED NODE   READINESS GATES
+monitor-api-bc867b8d8-xgqcl   1/1     Running   0          128m   10.244.0.12   minikube   <none>           <none>
+========== kubectl로 현재 노드 메트릭 확인 ==========
+명령어: kubectl top nodes
+NAME       CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+minikube   202m         5%       921Mi           11%         
+========== kubectl로 현재 포드 메트릭 확인 ==========
+명령어: kubectl top pods -n default
+NAME                          CPU(cores)   MEMORY(bytes)   
+monitor-api-bc867b8d8-xgqcl   6m           58Mi            
+resource-collector-qhqqn      13m          16Mi            
+========== kubectl로 default 네임스페이스 리소스 확인 ==========
+명령어: kubectl top pods -n default
+NAME                          CPU(cores)   MEMORY(bytes)   
+monitor-api-bc867b8d8-xgqcl   6m           58Mi            
+resource-collector-qhqqn      13m          16Mi            
+========== 서비스 상태 확인 ==========
+명령어: kubectl get services --all-namespaces
+NAMESPACE     NAME                   TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)                  AGE
+default       kubernetes             ClusterIP   10.96.0.1      <none>        443/TCP                  166m
+default       monitor-api-nodeport   NodePort    10.106.86.56   <none>        80:30080/TCP             128m
+default       monitor-api-service    ClusterIP   10.96.146.98   <none>        80/TCP                   128m
+kube-system   kube-dns               ClusterIP   10.96.0.10     <none>        53/UDP,53/TCP,9153/TCP   2d
+kube-system   metrics-server         ClusterIP   10.101.76.52   <none>        443/TCP                  116m
+========== PV/PVC 확인 ==========
+명령어: kubectl get pv,pvc --all-namespaces
+No resources found
+========== 이벤트 확인 ==========
+명령어: kubectl get events --all-namespaces --sort-by=.lastTimestamp | tail -15
+No resources found
+========== 리소스 사용량 요약 ==========
+명령어: kubectl top nodes && echo '---포드 리소스---' && kubectl top pods --all-namespaces | head -15
+NAME       CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+minikube   202m         5%       921Mi           11%         
+---포드 리소스---
+NAMESPACE     NAME                               CPU(cores)   MEMORY(bytes)   
+default       monitor-api-bc867b8d8-xgqcl        6m           58Mi            
+default       resource-collector-qhqqn           13m          16Mi            
+kube-system   coredns-674b8bbfcf-c6j87           11m          18Mi            
+kube-system   etcd-minikube                      27m          150Mi           
+kube-system   kube-apiserver-minikube            49m          216Mi           
+kube-system   kube-controller-manager-minikube   18m          43Mi            
+kube-system   kube-proxy-r2wx9                   1m           12Mi            
+kube-system   kube-scheduler-minikube            9m           21Mi            
+kube-system   metrics-server-7fbb699795-tcxt6    4m           17Mi            
+kube-system   storage-provisioner                2m           9Mi             
+========== 컨테이너 이미지 정보 확인 ==========
+명령어: kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{": "}{.spec.containers[*].image}{"\n"}{end}' --all-namespaces
+monitor-api-bc867b8d8-xgqcl: kubemonitor-api:latest
+resource-collector-qhqqn: kubemonitor-collector:latest
+coredns-674b8bbfcf-c6j87: registry.k8s.io/coredns/coredns:v1.12.0
+etcd-minikube: registry.k8s.io/etcd:3.5.21-0
+kube-apiserver-minikube: registry.k8s.io/kube-apiserver:v1.33.1
+kube-controller-manager-minikube: registry.k8s.io/kube-controller-manager:v1.33.1
+kube-proxy-r2wx9: registry.k8s.io/kube-proxy:v1.33.1
+kube-scheduler-minikube: registry.k8s.io/kube-scheduler:v1.33.1
+metrics-server-7fbb699795-tcxt6: registry.k8s.io/metrics-server/metrics-server:v0.7.2@sha256:ffcb2bf004d6aa0a17d90e0247cf94f2865c8901dcab4427034c341951c239f9
+storage-provisioner: gcr.io/k8s-minikube/storage-provisioner:v5
