@@ -10,23 +10,36 @@
 
 ```
 kubemonitor/
-├── collector/                 # 메트릭 수집기
-│   ├── collector.py           # DaemonSet용 리소스 수집 스크립트
-│   ├── requirements.txt       # Python 라이브러리 목록
-│   └── Dockerfile.collector   # Collector용 Dockerfile
-├── api/                       # API 서버
-│   ├── main.py               # FastAPI 앱 엔트리포인트
-│   ├── models.py             # Pydantic 모델 정의
-│   ├── storage.py            # 시계열 데이터 저장소
-│   ├── requirements.txt      # Python 라이브러리 목록
-│   └── Dockerfile.api        # API 서버용 Dockerfile
-├── deploy/                    # Kubernetes 배포
-│   └── monitor.yaml          # 배포 매니페스트 (DaemonSet + Deployment + Service)
-├── docs/                      # 문서
-│   ├── report.md            # 구현 보고서
-│   └── images/              # 스크린샷 및 다이어그램
-├── .gitignore              # Git 무시 파일 목록
-└── README.md               # 이 파일
+├── collector/
+│ ├── collector.py # DaemonSet용 리소스 수집 스크립트
+│ ├── requirements.txt # Python 라이브러리: requests
+│ └── Dockerfile.collector # Collector용 Dockerfile
+├── api/
+│ ├── main.py # FastAPI 앱 엔트리포인트
+│ ├── models.py # Pydantic 모델 정의
+│ ├── storage.py # 시계열 데이터 저장소 추상화
+│ ├── requirements.txt # Python 라이브러리: fastapi, uvicorn, pydantic
+│ └── Dockerfile.api # API 서버용 Dockerfile
+├── deploy/
+│ └── monitor.yaml # Kubernetes 배포 매니페스트
+├── scripts/ # 자동화 스크립트 모음
+│ ├── 00-setup-all.sh # 전체 환경 자동 구축 스크립트
+│ ├── 01-setup-environment.sh # 개발 환경 구축
+│ ├── 02-build-images.sh # Docker 이미지 빌드
+│ ├── 03-deploy.sh # Kubernetes 배포
+│ ├── 04-test.sh # 시스템 테스트
+│ ├── 05-test-api.sh # API 테스트
+│ ├── 05-test-api-with-save.sh # API 테스트 결과 저장
+│ ├── 06-comprehensive-test-with-kubectl # API 테스트 및 kubectl 결과 저장
+│ ├── kube-port-forward.sh # 포트 포워딩
+│ └── shutdown_all_settings.sh # 전체 종료
+├── result/ # 테스트 결과 저장소
+│ └── api-test-2025-06-10-15-13-36.txt # API 테스트 결과 (21090라인)
+├── docs/
+│ ├── report.md # 이 보고서 파일
+│ └── PRD.md # 요구사항 명세서
+├── .gitignore # Git 무시 파일 목록
+└── README.md # 프로젝트 설명서
 ```
 
 ## 🚀 빠른 시작
@@ -61,8 +74,14 @@ chmod +x scripts/*.sh
 # 3단계: Kubernetes 배포
 ./scripts/03-deploy.sh
 
-# 4단계: 시스템 테스트
+# 4단계: 기본 시스템 테스트
 ./scripts/04-test.sh
+
+# 5단계: API 테스트 (결과 저장)
+./scripts/05-test-api-with-save.sh
+
+# 6단계: 종합 테스트 (API + kubectl 비교 검증)
+./scripts/06-comprehensive-test-with-kubectl.sh
 ```
 
 ### 🔧 고급 옵션
@@ -85,96 +104,88 @@ chmod +x scripts/*.sh
 - 인터넷 연결
 - sudo 권한
 
-### 기존 수동 설치 방법
+## 🧪 테스트 스크립트
 
-<details>
-<summary>기존 수동 설치 방법 보기 (클릭하여 펼치기)</summary>
-
-### 1단계: 개발 환경 구축
-
+### 종합 테스트 (권장)
 ```bash
-# 시스템 업데이트
-sudo apt-get update && sudo apt-get upgrade -y
-
-# 필수 도구 설치
-sudo apt-get install -y curl wget git build-essential vim python3 python3-pip docker.io
-
-# Docker 설정
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER
-newgrp docker
-
-# kubectl 설치
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-chmod +x kubectl && sudo mv kubectl /usr/local/bin/
-
-# Minikube 설치
-curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-chmod +x minikube-linux-amd64 && sudo mv minikube-linux-amd64 /usr/local/bin/minikube
-
-# Minikube 클러스터 시작
-minikube start --driver=docker --cpus=4 --memory=8192
+# API 호출과 kubectl 명령어 결과를 비교 검증
+./scripts/06-comprehensive-test-with-kubectl.sh
 ```
 
-### 2단계: 프로젝트 클론 및 이미지 빌드
+**주요 기능:**
+- 🔍 API URL 자동 감지 (minikube service 우선 사용)
+- 📊 Metrics Server 상태 자동 확인 및 활성화
+- 🎯 스마트 API 응답 요약 (models.py 구조 기반)
+- 📋 모든 API 엔드포인트 테스트
+- 🔄 kubectl 명령어와 실시간 비교
+- 💾 전체 데이터는 로그 파일에 완전 보존
+- 🎨 색상 출력으로 가독성 향상
 
+**생성되는 파일:**
+- `result/comprehensive-test-TIMESTAMP.txt` - 종합 테스트 결과
+- `result/kubectl-output-TIMESTAMP.txt` - kubectl 전용 로그
+
+### 기본 테스트
 ```bash
-# 프로젝트 디렉토리로 이동 (이미 생성된 경우)
-cd ~/kubemonitor
+# 간단한 API 테스트
+./scripts/04-test.sh
 
-# Collector 이미지 빌드
-cd collector
-docker build -f Dockerfile.collector -t kubemonitor-collector:latest .
-minikube image load kubemonitor-collector:latest
-
-# API 서버 이미지 빌드
-cd ../api
-docker build -f Dockerfile.api -t kubemonitor-api:latest .
-minikube image load kubemonitor-api:latest
+# API 테스트 (결과 저장)
+./scripts/05-test-api-with-save.sh
 ```
-
-### 3단계: Kubernetes 배포
-
-```bash
-# 매니페스트 적용
-cd ../deploy
-kubectl apply -f monitor.yaml
-
-# 배포 상태 확인
-kubectl get daemonset,deployment,service
-kubectl get pods -l app=resource-collector
-kubectl get pods -l app=monitor-api
-```
-
-</details>
 
 ## 🔧 주요 기능
 
 ### 메트릭 수집
-- **CPU 사용량**: cgroup cpuacct.usage 기반
+- **CPU 사용량**: cgroup cpuacct.usage 기반 (밀리코어 단위)
 - **메모리 사용량**: /proc/meminfo 파싱
 - **디스크 I/O**: cgroup blkio 통계
 - **네트워크 트래픽**: /proc/net/dev 파싱
 
 ### API 엔드포인트
 
-#### 노드 메트릭
-- `GET /api/nodes` - 모든 노드 최신 메트릭
-- `GET /api/nodes/{node_name}` - 특정 노드 메트릭
-- `GET /api/nodes/{node_name}?window=60` - 시계열 조회 (60초간)
+#### 🖥️ 노드 기준
+- `GET /api/nodes` - 전체 노드 목록 및 리소스 사용량
+- `GET /api/nodes/{node_name}` - 특정 노드의 리소스 사용량 (호스트 프로세스 포함)
+- `GET /api/nodes/{node_name}/pods` - 해당 노드에 할당된 모든 포드 목록 (포드만)
+- `GET /api/nodes/{node_name}?window=60` - 노드 시계열 데이터 (60초간)
 - `POST /api/nodes/{node_name}` - 메트릭 수집 (Collector 전용)
 
-#### 포드 메트릭
-- `GET /api/pods` - 모든 포드 최신 메트릭
-- `GET /api/pods/{pod_name}` - 특정 포드 메트릭
-- `GET /api/pods/{pod_name}?window=300` - 시계열 조회 (300초간)
+#### 🐳 포드 기준
+- `GET /api/pods` - 전체 포드 목록 및 리소스 사용량
+- `GET /api/pods/{pod_name}` - 특정 포드의 실시간 리소스 사용량
+- `GET /api/pods/{pod_name}?window=300` - 포드 시계열 데이터 (300초간)
 - `POST /api/pods/{pod_name}` - 포드 메트릭 수집
 
-#### 네임스페이스 및 디플로이먼트
-- `GET /api/namespaces/{ns_name}` - 네임스페이스 메트릭
-- `GET /api/namespaces/{ns_name}/pods` - 네임스페이스 내 포드 목록
-- `GET /api/namespaces/{ns_name}/deployments` - 디플로이먼트 목록
-- `GET /api/namespaces/{ns_name}/deployments/{dp_name}` - 특정 디플로이먼트 메트릭
+#### 📁 네임스페이스 기준
+- `GET /api/namespaces` - 전체 네임스페이스 목록 및 리소스 사용량 (네임스페이스 내 모든 포드 리소스 합)
+- `GET /api/namespaces/{ns_name}` - 특정 네임스페이스의 리소스 사용량
+- `GET /api/namespaces/{ns_name}/pods` - 해당 네임스페이스의 포드 목록 및 리소스 사용량
+- `GET /api/namespaces/{ns_name}?window=60` - 네임스페이스 시계열 데이터
+
+#### 🚀 디플로이먼트 기준
+- `GET /api/namespaces/{ns_name}/deployments` - 해당 네임스페이스의 디플로이먼트 목록 및 리소스 사용량 (디플로이먼트 내 모든 포드 리소스 합)
+- `GET /api/namespaces/{ns_name}/deployments/{dp_name}` - 해당 디플로이먼트의 리소스 사용량
+- `GET /api/namespaces/{ns_name}/deployments/{dp_name}/pods` - 디플로이먼트 내 포드 목록 및 리소스 사용량
+
+#### ⏰ 시계열 조회
+- `GET /api/nodes?window={seconds}` - 노드 시계열 데이터
+- `GET /api/pods?window={seconds}` - 포드 시계열 데이터
+- `GET /api/namespaces/{ns_name}?window={seconds}` - 특정 네임스페이스 시계열 데이터
+
+#### 🏥 헬스 체크
+- `GET /health` - API 서버 상태 확인
+
+## 💡 CPU 단위 설명
+
+API에서 사용하는 CPU 단위는 **밀리코어(millicores)**입니다:
+- **1 코어 = 1000m (밀리코어)**
+- **1m = 0.001 코어**
+- **예시**: `cpu_millicores: 124389` = **124.389 CPU 코어**
+
+kubectl과의 차이점:
+- **API**: 누적/평균 데이터, cgroup 기반 상세 메트릭
+- **kubectl**: 실시간 스냅샷, Metrics Server 기반
 
 ## 🧪 성능 테스트
 
@@ -205,6 +216,8 @@ graph TB
     E[User] --> F[REST API]
     F --> D
     D --> G[JSON Response]
+    H[kubectl] --> I[Metrics Server]
+    F --> J[Swagger UI/ReDoc]
 ```
 
 ### 주요 컴포넌트
@@ -218,6 +231,7 @@ graph TB
    - FastAPI 기반 REST API
    - Pydantic 모델을 통한 데이터 검증
    - 인메모리 시계열 데이터 저장
+   - Swagger UI/ReDoc 자동 생성
 
 3. **Storage Layer**
    - 인메모리 딕셔너리 기반
@@ -226,9 +240,14 @@ graph TB
 
 ## 🔍 모니터링 대시보드
 
-Swagger UI를 통해 API를 시각적으로 테스트할 수 있습니다:
+API 문서를 통해 대화형으로 테스트할 수 있습니다:
+
 ```bash
+# Swagger UI
 http://$(minikube ip):30080/docs
+
+# ReDoc
+http://$(minikube ip):30080/redoc
 ```
 
 ## 🛠️ 개발 가이드
@@ -266,23 +285,30 @@ kubectl logs -f -l app=resource-collector
 
 ### 일반적인 문제
 
-1. **이미지 Pull 실패**
+1. **Metrics Server 사용 불가**
+   ```bash
+   # 자동 활성화 (종합 테스트 스크립트가 자동 처리)
+   minikube addons enable metrics-server
+   kubectl get pods -n kube-system | grep metrics-server
+   ```
+
+2. **이미지 Pull 실패**
    ```bash
    # 이미지가 Minikube에 로드되었는지 확인
    minikube image ls | grep kubemonitor
    ```
 
-2. **권한 오류**
-   ```bash
-   # DaemonSet이 privileged 모드로 실행되는지 확인
-   kubectl describe daemonset resource-collector
-   ```
-
 3. **API 연결 실패**
    ```bash
    # Service 상태 확인
-   kubectl get svc monitor-api-service
-   kubectl get endpoints monitor-api-service
+   kubectl get svc monitor-api-nodeport
+   minikube service monitor-api-nodeport --url
+   ```
+
+4. **권한 오류**
+   ```bash
+   # DaemonSet이 privileged 모드로 실행되는지 확인
+   kubectl describe daemonset resource-collector
    ```
 
 ### 디버깅 명령어
@@ -296,6 +322,9 @@ kubectl top nodes
 
 # 이벤트 확인
 kubectl get events --sort-by=.metadata.creationTimestamp
+
+# API 응답 직접 테스트
+curl "http://$(minikube ip):30080/health"
 ```
 
 ## 📈 성능 최적화
@@ -303,6 +332,19 @@ kubectl get events --sort-by=.metadata.creationTimestamp
 - **리소스 제한**: 각 컴포넌트에 적절한 CPU/메모리 제한 설정
 - **수집 간격**: 환경변수 `COLLECT_INTERVAL`로 조정 가능
 - **데이터 보관**: 메모리 사용량 고려하여 오래된 데이터 자동 삭제 로직 구현 권장
+- **출력 최적화**: 종합 테스트 스크립트는 화면 출력을 요약하고 전체 데이터는 파일에 저장
+
+## 🔍 테스트 결과 분석
+
+종합 테스트 실행 후 생성되는 파일들:
+- **종합 결과**: API 응답 요약과 kubectl 비교
+- **kubectl 로그**: 모든 kubectl 명령어 출력
+- **API 전체 응답**: JSON 형태로 완전 보존
+
+테스트 결과에서 확인할 수 있는 정보:
+- API와 kubectl 간 데이터 일관성 검증
+- 시계열 데이터 수집 상태
+- 메트릭 집계 정확성 (네임스페이스, 디플로이먼트별)
 
 ## 🤝 기여하기
 
